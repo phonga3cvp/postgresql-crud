@@ -1,5 +1,6 @@
 package com.phongdq.postgresqlcrud.controller;
 
+import com.phongdq.postgresqlcrud.aop.Profiler;
 import com.phongdq.postgresqlcrud.dto.CustomerDTO;
 import com.phongdq.postgresqlcrud.exception.CustomerNotFoundException;
 import com.phongdq.postgresqlcrud.model.Customer;
@@ -19,73 +20,80 @@ import java.util.Optional;
 @RequestMapping("/customers")
 public class CustomerController {
 
-    @Autowired
-    CustomerRepository repository;
+  @Autowired
+  CustomerRepository repository;
 
-    @GetMapping("/bulkcreate")
-    public String bulkCreate() {
-        repository.save(new Customer("Phong", "Duong"));
+  @GetMapping("/bulkcreate")
+  @Profiler
+  public String bulkCreate() {
+    repository.save(new Customer("Phong", "Duong"));
 
-        repository.saveAll(Arrays.asList(
-                new Customer("Victoria", "Sheppard"),
-                new Customer("Esha", "Prince"),
-                new Customer("Malaika", "Mclean")));
-        return "Customers is created";
+    repository.saveAll(Arrays.asList(
+            new Customer("Victoria", "Sheppard"),
+            new Customer("Esha", "Prince"),
+            new Customer("Malaika", "Mclean")));
+    return "Customers is created";
+  }
+
+  @GetMapping
+  @Profiler
+  public List<CustomerDTO> findAll() {
+    List<Customer> customers = repository.findAll();
+    List<CustomerDTO> customerDTOS = new ArrayList<>();
+    for (Customer c : customers) {
+      customerDTOS.add(new CustomerDTO(c.getFirstName(), c.getLastName()));
     }
+    return customerDTOS;
+  }
 
-    @GetMapping
-    public List<CustomerDTO> findAll() {
-        List<Customer> customers = repository.findAll();
-        List<CustomerDTO> customerDTOS = new ArrayList<>();
-        for (Customer c : customers) {
-            customerDTOS.add(new CustomerDTO(c.getFirstName(), c.getLastName()));
-        }
-        return customerDTOS;
-    }
+  @PostMapping
+  @Profiler
+  public ResponseEntity<Object> create(@RequestBody CustomerDTO customerDTO) {
+    Customer customer = repository.save(new Customer(customerDTO.getFirstName(), customerDTO.getLastName()));
+    URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
+            .buildAndExpand(customer.getId()).toUri();
+    return ResponseEntity.created(location).build();
+  }
 
-    @PostMapping
-    public ResponseEntity<Object> create(@RequestBody CustomerDTO customerDTO) {
-        Customer customer = repository.save(new Customer(customerDTO.getFirstName(), customerDTO.getLastName()));
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
-                .buildAndExpand(customer.getId()).toUri();
-        return ResponseEntity.created(location).build();
+  @GetMapping("/{id}")
+  @Profiler
+  public CustomerDTO getById(@PathVariable long id) {
+    Optional<Customer> customer = repository.findById(id);
+    if (!customer.isPresent()) {
+      throw new CustomerNotFoundException("not found id-" + id);
     }
+    Customer c = customer.get();
+    return new CustomerDTO(c.getFirstName(), c.getLastName());
+  }
 
-    @GetMapping("/{id}")
-    public CustomerDTO getById(@PathVariable long id) {
-        Optional<Customer> customer = repository.findById(id);
-        if (!customer.isPresent()) {
-            throw new CustomerNotFoundException("not found id-" + id);
-        }
-        Customer c = customer.get();
-        return new CustomerDTO(c.getFirstName(), c.getLastName());
-    }
+  @PutMapping("/{id}")
+  @Profiler
+  public ResponseEntity<CustomerDTO> update(@PathVariable long id, @RequestBody CustomerDTO param) {
+    return repository.findById(id).map(customer -> {
+      customer.setFirstName(param.getFirstName());
+      customer.setLastName(param.getLastName());
+      Customer updated = repository.save(customer);
+      return ResponseEntity.ok().body(new CustomerDTO(updated.getFirstName(), updated.getLastName()));
+    }).orElse(ResponseEntity.notFound().build());
+  }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<CustomerDTO> update(@PathVariable long id, @RequestBody CustomerDTO param) {
-        return repository.findById(id).map(customer -> {
-            customer.setFirstName(param.getFirstName());
-            customer.setLastName(param.getLastName());
-            Customer updated = repository.save(customer);
-            return ResponseEntity.ok().body(new CustomerDTO(updated.getFirstName(), updated.getLastName()));
-        }).orElse(ResponseEntity.notFound().build());
-    }
+  @DeleteMapping(path = "/{id}")
+  @Profiler
+  public ResponseEntity<?> delete(@PathVariable("id") long id) {
+    return repository.findById(id).map(customer -> {
+      repository.deleteById(id);
+      return ResponseEntity.ok().build();
+    }).orElse(ResponseEntity.notFound().build());
+  }
 
-    @DeleteMapping(path = "/{id}")
-    public ResponseEntity<?> delete(@PathVariable("id") long id) {
-        return repository.findById(id).map(customer -> {
-            repository.deleteById(id);
-            return ResponseEntity.ok().build();
-        }).orElse(ResponseEntity.notFound().build());
+  @GetMapping("/search")
+  @Profiler
+  public List<CustomerDTO> getByFirstName(@RequestParam(value = "firstName") String firstName) {
+    List<Customer> customers = repository.findByFirstName(firstName);
+    List<CustomerDTO> customerDTOS = new ArrayList<>();
+    for (Customer c : customers) {
+      customerDTOS.add(new CustomerDTO(c.getFirstName(), c.getLastName()));
     }
-
-    @GetMapping("/search")
-    public List<CustomerDTO> getByFirstName(@RequestParam(value = "firstName") String firstName) {
-        List<Customer> customers = repository.findByFirstName(firstName);
-        List<CustomerDTO> customerDTOS = new ArrayList<>();
-        for (Customer c : customers) {
-            customerDTOS.add(new CustomerDTO(c.getFirstName(), c.getLastName()));
-        }
-        return customerDTOS;
-    }
+    return customerDTOS;
+  }
 }
